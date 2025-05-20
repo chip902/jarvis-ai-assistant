@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  obsidian-claude-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: obsidian-claude-agent
+    volumes:
+      # Mount your Obsidian vault directory
+      - ${OBSIDIAN_VAULT_PATH:-./obsidian_vault}:/data/obsidian
+      # Mount your repository directory (for code changes)
+      - ${REPO_PATH:-./repository}:/app/repo
+    environment:
+      - OBSIDIAN_VAULT_PATH=/data/obsidian
+      # Claude API keys and other environment variables can be added here
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    working_dir: /app/repo
+    # Command arguments will be passed to the entrypoint script
+    # Usage: docker-compose run obsidian-claude-agent "Your Note Name"

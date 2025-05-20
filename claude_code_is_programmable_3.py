@@ -34,7 +34,8 @@ if len(sys.argv) < 2:
     console.print(
         "[bold red]ERROR: Please provide a Notion page name as an argument.[/bold red]"
     )
-    console.print("Usage: uv run claude_code_is_programmable_3.py <notion_page_name>")
+    console.print(
+        "Usage: uv run claude_code_is_programmable_3.py <notion_page_name>")
     sys.exit(1)
 
 page_name = sys.argv[1]
@@ -175,12 +176,14 @@ try:
     # Check for any errors
     stderr = process.stderr.read()
     if stderr:
-        console.print(f"[bold red]⚠️ Error output from Claude:[/bold red]\n{stderr}")
+        console.print(
+            f"[bold red]⚠️ Error output from Claude:[/bold red]\n{stderr}")
 
     # Get return code
     return_code = process.wait()
     if return_code == 0:
-        console.print(f"[bold green]✅ Claude Code completed successfully[/bold green]")
+        console.print(
+            f"[bold green]✅ Claude Code completed successfully[/bold green]")
     else:
         console.print(
             f"[bold red]❌ Claude Code failed with exit code: {return_code}[/bold red]"
@@ -188,7 +191,8 @@ try:
         sys.exit(return_code)
 
 except subprocess.CalledProcessError as e:
-    console.print(f"[bold red]❌ Error executing Claude Code: {str(e)}[/bold red]")
+    console.print(
+        f"[bold red]❌ Error executing Claude Code: {str(e)}[/bold red]")
     sys.exit(1)
 except Exception as e:
     console.print(f"[bold red]❌ Unexpected error: {str(e)}[/bold red]")

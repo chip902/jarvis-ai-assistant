@@ -79,9 +79,10 @@ from RealtimeSTT import AudioToTextRecorder
 import logging
 
 # Configuration - default values
-TRIGGER_WORDS = ["claude", "cloud", "sonnet", "sonny"]  # List of possible trigger words
+TRIGGER_WORDS = ["claude", "cloud", "sonnet",
+                 "sonny", "jarvis"]  # List of possible trigger words
 STT_MODEL = "small.en"  # Options: tiny.en, base.en, small.en, medium.en, large-v2
-TTS_VOICE = "nova"  # Options: alloy, echo, fable, onyx, nova, shimmer
+TTS_VOICE = "fable"  # Options: alloy, echo, fable, onyx, nova, shimmer
 DEFAULT_CLAUDE_TOOLS = [
     "Bash",
     "Edit",
@@ -144,7 +145,8 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 logging.getLogger("openai.http_client").setLevel(
     logging.ERROR
 )  # Suppress HTTP request logging
-logging.getLogger("openai._client").setLevel(logging.ERROR)  # Suppress client logging
+logging.getLogger("openai._client").setLevel(
+    logging.ERROR)  # Suppress client logging
 
 console = Console()
 
@@ -158,13 +160,12 @@ if missing_vars:
     console.print(
         f"[bold red]Error: Missing required environment variables: {', '.join(missing_vars)}[/bold red]"
     )
-    console.print("Please set these in your .env file or as environment variables.")
+    console.print(
+        "Please set these in your .env file or as environment variables.")
     sys.exit(1)
 
 # Initialize OpenAI client for TTS
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
-
 
 
 class ClaudeCodeAssistant:
@@ -191,7 +192,8 @@ class ClaudeCodeAssistant:
         self.output_dir.mkdir(exist_ok=True)
 
         # Set up the conversation file path
-        self.conversation_file = self.output_dir / f"{self.conversation_id}.yml"
+        self.conversation_file = self.output_dir / \
+            f"{self.conversation_id}.yml"
 
         # Load existing conversation or start a new one
         self.conversation_history = self.load_conversation_history()
@@ -203,11 +205,13 @@ class ClaudeCodeAssistant:
         """Load conversation history from YAML file if it exists"""
         if self.conversation_file.exists():
             try:
-                log.info(f"Loading existing conversation from {self.conversation_file}")
+                log.info(
+                    f"Loading existing conversation from {self.conversation_file}")
                 with open(self.conversation_file, "r") as f:
                     history = yaml.safe_load(f)
                     if history is None:
-                        log.info("Empty conversation file, starting new conversation")
+                        log.info(
+                            "Empty conversation file, starting new conversation")
                         return []
                     log.info(f"Loaded {len(history)} conversation turns")
                     return history
@@ -224,10 +228,13 @@ class ClaudeCodeAssistant:
     def save_conversation_history(self) -> None:
         """Save conversation history to YAML file"""
         try:
-            log.info(f"Saving conversation history to {self.conversation_file}")
+            log.info(
+                f"Saving conversation history to {self.conversation_file}")
             with open(self.conversation_file, "w") as f:
-                yaml.dump(self.conversation_history, f, default_flow_style=False)
-            log.info(f"Saved {len(self.conversation_history)} conversation turns")
+                yaml.dump(self.conversation_history,
+                          f, default_flow_style=False)
+            log.info(
+                f"Saved {len(self.conversation_history)} conversation turns")
         except Exception as e:
             log.error(f"Error saving conversation history: {e}")
             console.print(
@@ -278,7 +285,8 @@ class ClaudeCodeAssistant:
 
             # Display the prompt as if it were spoken
             console.print(
-                Panel(title="You", title_align="left", renderable=Markdown(prompt))
+                Panel(title="You", title_align="left",
+                      renderable=Markdown(prompt))
             )
 
             # Clear the initial prompt so it's only used once
@@ -302,7 +310,8 @@ class ClaudeCodeAssistant:
             if text:
                 console.print("")
                 console.print(
-                    Panel(title="You", title_align="left", renderable=Markdown(text))
+                    Panel(title="You", title_align="left",
+                          renderable=Markdown(text))
                 )
                 log.info(f'Heard: "{text}"')
                 result_container["text"] = text
@@ -367,7 +376,8 @@ class ClaudeCodeAssistant:
 
         except Exception as e:
             log.error(f"Error compressing speech: {str(e)}")
-            console.print(f"[bold red]Error compressing speech:[/bold red] {str(e)}")
+            console.print(
+                f"[bold red]Error compressing speech:[/bold red] {str(e)}")
             # Return original text if compression fails
             return text
 
@@ -412,7 +422,8 @@ class ClaudeCodeAssistant:
 
         except Exception as e:
             log.error(f"Error in speech synthesis: {str(e)}")
-            console.print(f"[bold red]Error in speech synthesis:[/bold red] {str(e)}")
+            console.print(
+                f"[bold red]Error in speech synthesis:[/bold red] {str(e)}")
             # Display the text as fallback
             console.print(f"[italic yellow]Text:[/italic yellow] {text}")
 
@@ -445,7 +456,8 @@ class ClaudeCodeAssistant:
 
         try:
             # Use simple subprocess.run for synchronous execution
-            process = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            process = subprocess.run(
+                cmd, capture_output=True, text=True, check=True)
 
             # Get the response
             response = process.stdout
@@ -453,10 +465,12 @@ class ClaudeCodeAssistant:
             log.info(f"Claude Code succeeded, output length: {len(response)}")
 
             # Display the response
-            console.print(Panel(title="Claude Response", renderable=Markdown(response)))
+            console.print(Panel(title="Claude Response",
+                          renderable=Markdown(response)))
 
             # Add to conversation history
-            self.conversation_history.append({"role": "assistant", "content": response})
+            self.conversation_history.append(
+                {"role": "assistant", "content": response})
 
             # Save the updated conversation history
             self.save_conversation_history()
@@ -498,7 +512,8 @@ class ClaudeCodeAssistant:
                 user_text = await self.listen()
 
                 if not user_text:
-                    console.print("[yellow]No speech detected. Try again.[/yellow]")
+                    console.print(
+                        "[yellow]No speech detected. Try again.[/yellow]")
                     continue
 
                 response = await self.process_message(user_text)
@@ -538,7 +553,8 @@ async def main():
     log.info("Starting Claude Code Voice Assistant")
 
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Voice-enabled Claude Code assistant")
+    parser = argparse.ArgumentParser(
+        description="Voice-enabled Claude Code assistant")
     parser.add_argument(
         "--id",
         "-i",
@@ -554,7 +570,8 @@ async def main():
     args = parser.parse_args()
 
     # Create assistant instance with conversation ID and initial prompt
-    assistant = ClaudeCodeAssistant(conversation_id=args.id, initial_prompt=args.prompt)
+    assistant = ClaudeCodeAssistant(
+        conversation_id=args.id, initial_prompt=args.prompt)
 
     # Show some helpful information about the conversation
     if args.id:
@@ -564,7 +581,8 @@ async def main():
                 f"[bold green]Resuming conversation {args.id} with {len(assistant.conversation_history)} turns[/bold green]"
             )
         else:
-            log.info(f"Starting new conversation with user-provided ID: {args.id}")
+            log.info(
+                f"Starting new conversation with user-provided ID: {args.id}")
             console.print(
                 f"[bold blue]Starting new conversation with ID: {args.id}[/bold blue]"
             )
@@ -577,7 +595,8 @@ async def main():
         )
 
     log.info(f"Conversation will be saved to: {assistant.conversation_file}")
-    console.print(f"[bold]Conversation file: {assistant.conversation_file}[/bold]")
+    console.print(
+        f"[bold]Conversation file: {assistant.conversation_file}[/bold]")
 
     # Process initial prompt if provided
     if args.prompt:

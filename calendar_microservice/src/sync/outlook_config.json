@@ -1,0 +1,14 @@
+{
+  "agent_id": "outlook-remote-agent",
+  "agent_name": "Outlook Remote Agent",
+  "environment": "Remote Windows",
+  "central_api_url": "http://your-central-service:8000",
+  "sync_interval_minutes": 30,
+  "calendar_sources": [
+    {
+      "type": "outlook",
+      "name": "Main Outlook Calendar",
+      "calendar_name": "Calendar"
+    }
+  ]
+}
