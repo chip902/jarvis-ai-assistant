@@ -1,0 +1,4 @@
+obsidiantools>=0.8.0
+python-dotenv>=0.21.0
+rich>=12.6.0
+claude-cli>=1.0.0
