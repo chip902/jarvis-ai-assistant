@@ -101,9 +101,64 @@ class CalendarSyncController:
     async def configure_destination(self, destination: SyncDestination) -> SyncDestination:
         """Configure the synchronization destination"""
         config = await self.load_configuration()
+        
+        # If using separate calendars for sources, set up those calendars
+        if destination.color_management == "separate_calendar":
+            for source in config.sources:
+                if source.enabled:
+                    # Create a new calendar in the destination for this source if not already created
+                    if source.id not in destination.source_calendars:
+                        try:
+                            new_calendar_id = await self._create_calendar_for_source(destination, source)
+                            # Store the mapping of source to destination calendar
+                            destination.source_calendars[source.id] = new_calendar_id
+                            logger.info(f"Created new calendar for source {source.name} with ID {new_calendar_id}")
+                        except Exception as e:
+                            logger.error(f"Error creating calendar for source {source.name}: {e}")
+        
         config.destination = destination
         await self.save_configuration(config)
         return destination
+        
+    async def _create_calendar_for_source(self, destination: SyncDestination, source: SyncSource) -> str:
+        """Create a new calendar in the destination for a specific source"""
+        calendar_name = f"{source.name} (Synced)"
+        
+        if destination.provider_type == CalendarProvider.GOOGLE.value:
+            # Create a Google Calendar
+            service = await self.unified_service.google_service.auth.get_calendar_service(destination.credentials)
+            new_calendar = {
+                'summary': calendar_name,
+                'description': f"Calendar synced from {source.provider_type}:{source.name}"
+            }
+            created_calendar = service.calendars().insert(body=new_calendar).execute()
+            return created_calendar['id']
+            
+        elif destination.provider_type == CalendarProvider.MICROSOFT.value:
+            # Create a Microsoft Calendar
+            client = await self.unified_service.microsoft_service.auth.get_graph_client(destination.credentials)
+            new_calendar = {
+                'name': calendar_name,
+                'color': self._get_microsoft_color_for_source(source)
+            }
+            response = await client.post("/me/calendars", json=new_calendar)
+            created_calendar = response.json()
+            return created_calendar['id']
+        
+        raise ValueError(f"Unsupported destination provider: {destination.provider_type}")
+
+    def _get_microsoft_color_for_source(self, source: SyncSource) -> str:
+        """Determine a Microsoft calendar color based on source"""
+        # Mapping of provider types to Microsoft calendar colors
+        provider_color_map = {
+            "google": "lightGreen",
+            "microsoft": "lightBlue",
+            "exchange": "lightTeal",
+            "apple": "lightPurple",
+            "custom": "lightYellow"
+        }
+        
+        return provider_color_map.get(source.provider_type, "auto")
     
     async def add_sync_agent(self, agent: SyncAgentConfig) -> SyncAgentConfig:
         """Add a new synchronization agent"""
@@ -352,8 +407,15 @@ class CalendarSyncController:
             "errors": []
         }
         
-        # Get existing events from destination to check for conflicts
-        existing_events = await self._get_existing_events(destination)
+        # Determine which calendar to use based on color management strategy
+        target_calendar_id = destination.calendar_id
+        if destination.color_management == "separate_calendar" and source.id in destination.source_calendars:
+            # Use the source-specific calendar if available
+            target_calendar_id = destination.source_calendars[source.id]
+            logger.info(f"Using source-specific calendar {target_calendar_id} for source {source.name}")
+        
+        # Get existing events from the target calendar to check for conflicts
+        existing_events = await self._get_existing_events(destination, target_calendar_id)
         existing_event_ids = {event.id for event in existing_events}
         
         # Process each event
@@ -374,14 +436,14 @@ class CalendarSyncController:
                     
                     # Update event if different
                     if resolved_event != existing_event:
-                        success = await self._update_event_in_destination(resolved_event, destination)
+                        success = await self._update_event_in_destination(resolved_event, destination, target_calendar_id)
                         if success:
                             results["success_count"] += 1
                         else:
                             results["failure_count"] += 1
                 else:
                     # New event, create it
-                    success = await self._create_event_in_destination(event, destination, source)
+                    success = await self._create_event_in_destination(event, destination, source, target_calendar_id)
                     if success:
                         results["success_count"] += 1
                     else:
@@ -395,9 +457,12 @@ class CalendarSyncController:
         
         return results
     
-    async def _get_existing_events(self, destination: SyncDestination) -> List[CalendarEvent]:
+    async def _get_existing_events(self, destination: SyncDestination, calendar_id: str = None) -> List[CalendarEvent]:
         """Get existing events from the destination calendar"""
         events = []
+        
+        # Use specified calendar ID or default to destination calendar ID
+        target_calendar_id = calendar_id or destination.calendar_id
         
         # Determine date range for sync
         start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -408,7 +473,7 @@ class CalendarSyncController:
                 # Use Google Calendar service
                 result = await self.unified_service.google_service.get_events(
                     token_info=destination.credentials,
-                    calendar_id=destination.calendar_id,
+                    calendar_id=target_calendar_id,
                     start_date=start_date,
                     end_date=end_date
                 )
@@ -418,7 +483,7 @@ class CalendarSyncController:
                 # Use Microsoft Calendar service
                 result = await self.unified_service.microsoft_service.get_events(
                     token_info=destination.credentials,
-                    calendar_id=destination.calendar_id,
+                    calendar_id=target_calendar_id,
                     start_date=start_date,
                     end_date=end_date
                 )
@@ -462,18 +527,70 @@ class CalendarSyncController:
         self, 
         event: CalendarEvent, 
         destination: SyncDestination,
-        source: SyncSource
+        source: SyncSource,
+        calendar_id: str = None
     ) -> bool:
         """Create a new event in the destination calendar"""
         try:
-            # Prepare event for destination
-            # In a real implementation, you would need to convert the CalendarEvent
-            # back to the format expected by the destination provider's API
+            # Use specified calendar ID or default to destination calendar ID
+            target_calendar_id = calendar_id or destination.calendar_id
             
-            # For now, we'll just log a message
-            logger.info(f"Would create event '{event.title}' in destination calendar {destination.calendar_id}")
-            
-            # Mark as successful for this demo
+            if destination.provider_type == CalendarProvider.GOOGLE.value:
+                # Prepare Google event payload
+                event_payload = {
+                    'summary': event.title,
+                    'description': event.description or '',
+                    'location': event.location or '',
+                    'start': {
+                        'dateTime': event.start_time.isoformat() if not event.all_day else None,
+                        'date': event.start_time.date().isoformat() if event.all_day else None,
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event.end_time.isoformat() if not event.all_day else None,
+                        'date': event.end_time.date().isoformat() if event.all_day else None,
+                        'timeZone': 'UTC'
+                    },
+                    # Include source identifier in the description
+                    'description': f"{event.description or ''}\n\nSynced from: {source.name}"
+                }
+                
+                # Create the event
+                service = await self.unified_service.google_service.auth.get_calendar_service(destination.credentials)
+                service.events().insert(calendarId=target_calendar_id, body=event_payload).execute()
+                logger.info(f"Created event '{event.title}' in Google calendar {target_calendar_id}")
+                
+            elif destination.provider_type == CalendarProvider.MICROSOFT.value:
+                # Prepare Microsoft event payload
+                event_payload = {
+                    'subject': event.title,
+                    'body': {
+                        'contentType': 'text',
+                        'content': f"{event.description or ''}\n\nSynced from: {source.name}"
+                    },
+                    'location': {
+                        'displayName': event.location or ''
+                    },
+                    'start': {
+                        'dateTime': event.start_time.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event.end_time.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'isAllDay': event.all_day
+                }
+                
+                # Create the event
+                client = await self.unified_service.microsoft_service.auth.get_graph_client(destination.credentials)
+                await client.post(f"/me/calendars/{target_calendar_id}/events", json=event_payload)
+                logger.info(f"Created event '{event.title}' in Microsoft calendar {target_calendar_id}")
+                
+            else:
+                logger.warning(f"Unsupported destination provider: {destination.provider_type}")
+                return False
+                
             return True
             
         except Exception as e:
@@ -483,18 +600,75 @@ class CalendarSyncController:
     async def _update_event_in_destination(
         self, 
         event: CalendarEvent, 
-        destination: SyncDestination
+        destination: SyncDestination,
+        calendar_id: str = None
     ) -> bool:
         """Update an existing event in the destination calendar"""
         try:
-            # Prepare event for destination
-            # In a real implementation, you would need to convert the CalendarEvent
-            # back to the format expected by the destination provider's API
+            # Use specified calendar ID or default to destination calendar ID
+            target_calendar_id = calendar_id or destination.calendar_id
             
-            # For now, we'll just log a message
-            logger.info(f"Would update event '{event.title}' in destination calendar {destination.calendar_id}")
-            
-            # Mark as successful for this demo
+            if destination.provider_type == CalendarProvider.GOOGLE.value:
+                # Prepare Google event payload
+                event_payload = {
+                    'summary': event.title,
+                    'description': event.description or '',
+                    'location': event.location or '',
+                    'start': {
+                        'dateTime': event.start_time.isoformat() if not event.all_day else None,
+                        'date': event.start_time.date().isoformat() if event.all_day else None,
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event.end_time.isoformat() if not event.all_day else None,
+                        'date': event.end_time.date().isoformat() if event.all_day else None,
+                        'timeZone': 'UTC'
+                    }
+                }
+                
+                # Update the event
+                service = await self.unified_service.google_service.auth.get_calendar_service(destination.credentials)
+                service.events().update(
+                    calendarId=target_calendar_id, 
+                    eventId=event.provider_id,  # Use provider-specific ID
+                    body=event_payload
+                ).execute()
+                logger.info(f"Updated event '{event.title}' in Google calendar {target_calendar_id}")
+                
+            elif destination.provider_type == CalendarProvider.MICROSOFT.value:
+                # Prepare Microsoft event payload
+                event_payload = {
+                    'subject': event.title,
+                    'body': {
+                        'contentType': 'text',
+                        'content': event.description or ''
+                    },
+                    'location': {
+                        'displayName': event.location or ''
+                    },
+                    'start': {
+                        'dateTime': event.start_time.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event.end_time.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'isAllDay': event.all_day
+                }
+                
+                # Update the event
+                client = await self.unified_service.microsoft_service.auth.get_graph_client(destination.credentials)
+                await client.patch(
+                    f"/me/calendars/{target_calendar_id}/events/{event.provider_id}", 
+                    json=event_payload
+                )
+                logger.info(f"Updated event '{event.title}' in Microsoft calendar {target_calendar_id}")
+                
+            else:
+                logger.warning(f"Unsupported destination provider: {destination.provider_type}")
+                return False
+                
             return True
             
         except Exception as e:

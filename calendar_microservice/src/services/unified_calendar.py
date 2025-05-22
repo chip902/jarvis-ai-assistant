@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from services.google_calendar import GoogleCalendarService
 from services.microsoft_calendar import MicrosoftCalendarService
+from services.apple_calendar import AppleCalendarService
 from services.calendar_event import CalendarEvent, CalendarProvider
 
 # Set up logging
@@ -19,6 +20,7 @@ class UnifiedCalendarService:
         """Initialize the unified calendar service"""
         self.google_service = GoogleCalendarService()
         self.microsoft_service = MicrosoftCalendarService()
+        self.apple_service = AppleCalendarService()
     
     async def list_all_calendars(self, user_credentials: Dict[str, Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -42,6 +44,11 @@ class UnifiedCalendarService:
         if CalendarProvider.MICROSOFT.value in user_credentials:
             microsoft_creds = user_credentials[CalendarProvider.MICROSOFT.value]
             tasks.append(self._get_microsoft_calendars(microsoft_creds))
+            
+        # Apple calendars
+        if CalendarProvider.APPLE.value in user_credentials:
+            apple_creds = user_credentials[CalendarProvider.APPLE.value]
+            tasks.append(self._get_apple_calendars(apple_creds))
         
         # Execute tasks concurrently
         if tasks:
@@ -76,6 +83,15 @@ class UnifiedCalendarService:
         except Exception as e:
             logger.error(f"Error fetching Microsoft calendars: {e}")
             return CalendarProvider.MICROSOFT.value, []
+            
+    async def _get_apple_calendars(self, credentials: Dict[str, Any]) -> tuple:
+        """Helper method to fetch Apple calendars"""
+        try:
+            calendars = await self.apple_service.list_calendars(credentials)
+            return CalendarProvider.APPLE.value, calendars
+        except Exception as e:
+            logger.error(f"Error fetching Apple calendars: {e}")
+            return CalendarProvider.APPLE.value, []
     
     async def get_all_events(
         self,
@@ -111,7 +127,8 @@ class UnifiedCalendarService:
         if not sync_tokens:
             sync_tokens = {
                 CalendarProvider.GOOGLE.value: {},
-                CalendarProvider.MICROSOFT.value: {}
+                CalendarProvider.MICROSOFT.value: {},
+                CalendarProvider.APPLE.value: {}
             }
         
         # Create tasks for fetching events
@@ -160,12 +177,35 @@ class UnifiedCalendarService:
                         delta_link
                     )
                 )
+                
+        # Apple events
+        if (CalendarProvider.APPLE.value in user_credentials and 
+            CalendarProvider.APPLE.value in calendar_selections):
+            
+            apple_creds = user_credentials[CalendarProvider.APPLE.value]
+            apple_calendars = calendar_selections[CalendarProvider.APPLE.value]
+            
+            apple_tokens = sync_tokens.get(CalendarProvider.APPLE.value, {})
+            
+            for calendar_id in apple_calendars:
+                delta_link = apple_tokens.get(calendar_id)
+                tasks.append(
+                    self._get_apple_events(
+                        apple_creds, 
+                        calendar_id, 
+                        start_date, 
+                        end_date,
+                        max_results_per_calendar,
+                        delta_link
+                    )
+                )
         
         # Execute all tasks concurrently
         all_events = []
         new_sync_tokens = {
             CalendarProvider.GOOGLE.value: {},
-            CalendarProvider.MICROSOFT.value: {}
+            CalendarProvider.MICROSOFT.value: {},
+            CalendarProvider.APPLE.value: {}
         }
         
         if tasks:
@@ -255,3 +295,33 @@ class UnifiedCalendarService:
         except Exception as e:
             logger.error(f"Error fetching Microsoft events for calendar {calendar_id}: {e}")
             return CalendarProvider.MICROSOFT.value, calendar_id, [], None
+            
+    async def _get_apple_events(
+        self, 
+        credentials: Dict[str, Any], 
+        calendar_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        max_results: int,
+        delta_link: Optional[str]
+    ) -> tuple:
+        """Helper method to fetch Apple events"""
+        try:
+            result = await self.apple_service.get_events(
+                token_info=credentials,
+                calendar_id=calendar_id,
+                start_date=start_date,
+                end_date=end_date,
+                max_results=max_results,
+                delta_link=delta_link
+            )
+            
+            return (
+                CalendarProvider.APPLE.value,
+                calendar_id,
+                result.get('events', []),
+                result.get('deltaLink')
+            )
+        except Exception as e:
+            logger.error(f"Error fetching Apple events for calendar {calendar_id}: {e}")
+            return CalendarProvider.APPLE.value, calendar_id, [], None

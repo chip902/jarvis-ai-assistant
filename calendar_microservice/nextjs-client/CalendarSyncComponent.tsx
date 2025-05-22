@@ -349,7 +349,10 @@ const CalendarSyncComponent: React.FC<CalendarSyncProps> = ({
         credentials,
         calendarId,
         conflictResolution: 'latest_wins',
-        categories: {}
+        categories: {},
+        // New fields for color management
+        sourceCalendars: {},
+        colorManagement: 'separate_calendar' // Default to separate calendars for better color support
       };
       
       await configureDestination(newDestination);

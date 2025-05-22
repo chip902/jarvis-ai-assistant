@@ -88,6 +88,9 @@ export interface SyncDestination {
   calendarId: string;
   conflictResolution: 'source_wins' | 'destination_wins' | 'latest_wins' | 'manual';
   categories: Record<string, string>;
+  // New fields for color management
+  sourceCalendars: Record<string, string>;
+  colorManagement: 'category' | 'property' | 'separate_calendar';
 }
 
 export interface SyncConfiguration {

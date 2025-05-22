@@ -92,9 +92,12 @@ class SyncDestination(BaseModel):
     provider_type: str  # google, microsoft, exchange, etc.
     connection_info: Dict[str, Any]
     credentials: Optional[Dict[str, Any]] = None
-    calendar_id: str  # Single destination calendar ID
+    calendar_id: str  # Primary destination calendar ID
     conflict_resolution: ConflictResolution = ConflictResolution.LATEST_WINS
     categories: Dict[str, str] = Field(default_factory=dict)  # Mapping source -> category
+    # New fields for multiple calendars and color management
+    source_calendars: Dict[str, str] = Field(default_factory=dict)  # Mapping source_id -> calendar_id
+    color_management: str = "separate_calendar"  # Options: "category", "property", "separate_calendar"
 
 class SyncAgentConfig(BaseModel):
     """Configuration for a remote calendar sync agent"""

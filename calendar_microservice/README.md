@@ -87,6 +87,8 @@ calendar_microservice/
 
 ### Central Service
 
+#### Option 1: Native Installation
+
 1. Clone the repository
 2. Create a virtual environment (optional but recommended)
    ```
@@ -105,6 +107,40 @@ calendar_microservice/
    ```
    uvicorn src.main:app --reload
    ```
+
+#### Option 2: Docker Installation
+
+1. Clone the repository
+2. Copy `.env.example` to `.env` and fill in the required values
+   ```
+   cp .env.example .env
+   ```
+3. Build and start the service using Docker Compose
+   ```
+   docker-compose up -d
+   ```
+4. The service will be available at `http://localhost:8008`
+
+#### Option 3: Synology NAS with Portainer
+
+1. In Portainer, navigate to Stacks and click 'Add stack'
+2. Name your stack (e.g., 'calendar-microservice')
+3. Copy the contents of the `docker-compose.yml` file into the Web editor
+4. Under Environment variables, add the following or create an .env file in your stack folder:
+   - Add all the variables from the `.env.example` file with your values
+5. Click 'Deploy the stack'
+6. The service will be available at `http://your-synology-ip:8008`
+
+Note: For persistent storage on Synology, you may want to modify the volume paths in `docker-compose.yml` to point to your desired locations on your NAS.
+
+#### Required Files for Docker/Portainer Deployment
+
+To deploy this service with Docker or Portainer, ensure you have the following files:
+
+1. `docker-compose.yml` - Defines the service containers and their configurations
+2. `Dockerfile` - Contains instructions for building the application container
+3. `.env` - Environment variables for configuration (copy from `.env.example` and customize)
+4. `requirements.txt` - Lists all Python dependencies
 
 ### Remote Agent
 
@@ -146,7 +182,7 @@ return (
 2. Create a new project or select an existing one
 3. Enable the Google Calendar API
 4. Create OAuth 2.0 credentials (Web application type)
-5. Add authorized redirect URIs (e.g., `http://localhost:8000/api/auth/google/callback`)
+5. Add authorized redirect URIs (e.g., `http://localhost:8008/api/auth/google/callback`)
 6. Copy the Client ID and Client Secret to your `.env` file
 
 ### Microsoft Graph API
@@ -158,7 +194,7 @@ return (
    - Calendars.Read.Shared
    - User.Read
 4. Create a client secret
-5. Add redirect URIs (e.g., `http://localhost:8000/api/auth/microsoft/callback`)
+5. Add redirect URIs (e.g., `http://localhost:8008/api/auth/microsoft/callback`)
 6. Copy the Application (Client) ID, Client Secret, and Tenant ID to your `.env` file
 
 ## Synchronization Setup
@@ -193,7 +229,7 @@ For calendars in isolated environments:
 
 ```typescript
 // Initialize the client
-const calendarClient = new CalendarClient('http://localhost:8000');
+const calendarClient = new CalendarClient('http://localhost:8008');
 
 // Authenticate with Google
 const googleAuthUrl = await calendarClient.getAuthUrl(CalendarProvider.GOOGLE);
@@ -282,12 +318,12 @@ CORS_ORIGINS=http://localhost:3000,https://yourapp.com
 # Google Calendar
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+GOOGLE_REDIRECT_URI=http://localhost:8008/api/auth/google/callback
 
 # Microsoft Graph
 MS_CLIENT_ID=your-client-id
 MS_CLIENT_SECRET=your-client-secret 
-MS_REDIRECT_URI=http://localhost:8000/api/auth/microsoft/callback
+MS_REDIRECT_URI=http://localhost:8008/api/auth/microsoft/callback
 MS_TENANT_ID=your-tenant-id
 
 # Redis for caching (optional)
@@ -315,6 +351,85 @@ For custom calendar sources, you can extend the remote agent:
 - OAuth tokens are stored securely and never exposed in URLs
 - Agents run with minimal required permissions in their environments
 - Credential isolation ensures agents only access what they need
+
+## Docker Setup
+
+The project includes Docker support for easy deployment.
+
+### Dockerfile
+
+A Dockerfile is provided that:
+- Uses Python 3.11 slim image as base
+- Installs all required dependencies
+- Creates a non-root user for security
+- Exposes port 8008 for the API
+
+### Docker Compose
+
+A docker-compose.yml file is included that sets up:
+
+1. The calendar microservice 
+2. A Redis instance for caching and storage
+
+To use it:
+
+```bash
+# Start the services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the services
+docker-compose down
+```
+
+### Deployment on Synology NAS with Portainer
+
+1. **Prerequisites**:
+   - Synology NAS with Docker package installed
+   - Portainer installed on your Synology NAS
+
+2. **Set up the stack**:
+   - Log in to Portainer (usually at http://your-synology-ip:9000)
+   - Navigate to 'Stacks' and click 'Add stack'
+   - Name your stack (e.g., 'calendar-microservice')
+   - In the 'Web editor' tab, paste the contents of your docker-compose.yml file
+  
+3. **Configure environment variables**:
+   - Option 1: Use the Portainer UI to add each environment variable
+   - Option 2: Create an .env file in your stack folder on the NAS
+
+4. **Configure volumes**:
+   - For better persistence on Synology, you can modify the volume paths to use specific folders on your NAS
+   - Example modified volume section:
+     ```yaml
+     volumes:
+       calendar-storage:
+         driver: local
+         driver_opts:
+           type: none
+           o: bind
+           device: /volume1/docker/calendar-microservice/storage
+       redis-data:
+         driver: local
+         driver_opts:
+           type: none
+           o: bind
+           device: /volume1/docker/calendar-microservice/redis-data
+     ```
+
+5. **Deploy the stack**:
+   - Click 'Deploy the stack' button
+   - Portainer will create the containers according to your configuration
+
+6. **Access the service**:
+   - The calendar microservice will be available at http://your-synology-ip:8008
+   - You can configure reverse proxy in Synology DSM to use a custom domain
+
+7. **Maintenance**:
+   - View logs in Portainer by clicking on the container name and then 'Logs'
+   - Update the service by pulling new code, updating your docker-compose.yml, and redeploying the stack
 
 ## Contributing
 

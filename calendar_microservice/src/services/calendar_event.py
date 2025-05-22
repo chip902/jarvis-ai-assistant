@@ -8,6 +8,8 @@ class CalendarProvider(str, Enum):
     """Enum for supported calendar providers"""
     GOOGLE = "google"
     MICROSOFT = "microsoft"
+    APPLE = "apple"
+    EXCHANGE = "exchange"  # For Mailcow ActiveSync
 
 
 class EventParticipant(BaseModel):
