@@ -235,3 +235,86 @@ class CalendarEvent(BaseModel):
             updated_at=datetime.fromisoformat(event["lastModifiedDateTime"].replace('Z', '+00:00')) if "lastModifiedDateTime" in event else None,
             original_data=event
         )
+        
+    @classmethod
+    def from_exchange(cls, event: Dict[str, Any], calendar_id: str, calendar_name: Optional[str] = None) -> "CalendarEvent":
+        """
+        Create a normalized CalendarEvent from Exchange/Mailcow ActiveSync event
+        """
+        # Extract start and end times
+        start = event.get("start", {})
+        end = event.get("end", {})
+        
+        # Determine if it's an all-day event
+        all_day = event.get("isAllDay", False)
+        
+        # Get start and end times
+        start_dt = datetime.fromisoformat(start.get("dateTime", "").replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end.get("dateTime", "").replace('Z', '+00:00'))
+        
+        # Extract organizer
+        organizer = None
+        if "organizer" in event:
+            organizer_data = event["organizer"]
+            organizer = EventParticipant(
+                email=organizer_data.get("emailAddress", {}).get("address"),
+                name=organizer_data.get("emailAddress", {}).get("name"),
+                response_status="accepted"  # Organizers are implicitly accepted
+            )
+        
+        # Extract participants
+        participants = []
+        for attendee in event.get("attendees", []):
+            # Exchange attendees follow a similar format to Microsoft Graph
+            participants.append(EventParticipant.from_microsoft(attendee))
+        
+        # Map Exchange status to common format
+        status_map = {
+            "confirmed": "confirmed",
+            "tentative": "tentative",
+            "cancelled": "cancelled"
+        }
+        
+        ex_status = None
+        if "showAs" in event:
+            if event["showAs"] == "tentative":
+                ex_status = "tentative"
+            elif event["showAs"] == "busy":
+                ex_status = "confirmed"
+            elif event["showAs"] == "free":
+                ex_status = "confirmed"  # Free time on calendar is still a confirmed event
+        
+        # Check if event is cancelled
+        if event.get("isCancelled", False):
+            ex_status = "cancelled"
+        
+        # Determine if event is recurring
+        recurring = event.get("recurrence", None) is not None
+        recurrence_pattern = None
+        if recurring and event.get("recurrence", {}).get("pattern"):
+            recurrence_pattern = str(event["recurrence"]["pattern"])
+        
+        # Create the normalized event
+        return cls(
+            id=f"exchange_{event['id']}",
+            provider=CalendarProvider.EXCHANGE,
+            provider_id=event["id"],
+            title=event.get("subject", "Untitled Event"),
+            description=event.get("bodyPreview"),
+            location=event.get("location", {}).get("displayName"),
+            start_time=start_dt,
+            end_time=end_dt,
+            all_day=all_day,
+            organizer=organizer,
+            participants=participants,
+            recurring=recurring,
+            recurrence_pattern=recurrence_pattern,
+            calendar_id=calendar_id,
+            calendar_name=calendar_name,
+            link=event.get("webLink"),
+            private=event.get("sensitivity") == "private",
+            status=ex_status,
+            created_at=datetime.fromisoformat(event["createdDateTime"].replace('Z', '+00:00')) if "createdDateTime" in event else None,
+            updated_at=datetime.fromisoformat(event["lastModifiedDateTime"].replace('Z', '+00:00')) if "lastModifiedDateTime" in event else None,
+            original_data=event
+        )

@@ -8,14 +8,22 @@ from services.unified_calendar import UnifiedCalendarService
 from services.calendar_event import CalendarProvider
 from auth.google_auth import GoogleCalendarAuth
 from auth.microsoft_auth import MicrosoftGraphAuth
+from auth.exchange_auth import ExchangeAuth
 from utils.config import settings
+
+# Import the Exchange router
+from api.exchange_router import router as exchange_router
 
 # Initialize API router
 router = APIRouter()
 
+# Include the Exchange router
+router.include_router(exchange_router)
+
 # Initialize services
 google_auth = GoogleCalendarAuth()
 ms_auth = MicrosoftGraphAuth()
+exchange_auth = ExchangeAuth()
 calendar_service = UnifiedCalendarService()
 
 # Simple route for testing

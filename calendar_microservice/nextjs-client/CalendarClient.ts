@@ -10,7 +10,9 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 // Type definitions
 export enum CalendarProvider {
   GOOGLE = 'google',
-  MICROSOFT = 'microsoft'
+  MICROSOFT = 'microsoft',
+  APPLE = 'apple',
+  EXCHANGE = 'exchange'
 }
 
 export interface CalendarCredentials {
@@ -19,6 +21,11 @@ export interface CalendarCredentials {
   refresh_token?: string;
   expires_at?: number;
   tenant_id?: string; // For Microsoft only
+  
+  // For Exchange/Mailcow ActiveSync
+  exchange_url?: string;
+  username?: string;
+  password?: string;
 }
 
 export interface EventParticipant {
@@ -116,7 +123,9 @@ export class CalendarClient {
   private calendarSelections: Record<string, string[]> = {};
   private syncTokens: Record<string, Record<string, string>> = {
     [CalendarProvider.GOOGLE]: {},
-    [CalendarProvider.MICROSOFT]: {}
+    [CalendarProvider.MICROSOFT]: {},
+    [CalendarProvider.APPLE]: {},
+    [CalendarProvider.EXCHANGE]: {}
   };
 
   /**
@@ -150,11 +159,49 @@ export class CalendarClient {
    */
   public async getAuthUrl(provider: CalendarProvider, tenantId?: string): Promise<string> {
     try {
+      // For Exchange/Mailcow, there's no OAuth flow - return empty string
+      if (provider === CalendarProvider.EXCHANGE) {
+        return '';
+      }
+      
       const endpoint = `/api/auth/${provider.toLowerCase()}${tenantId ? `?tenant_id=${tenantId}` : ''}`;
       const response = await this.api.get(endpoint);
       return response.data.auth_url;
     } catch (error: any) {
       console.error(`Error getting auth URL for ${provider}:`, error.response?.data || error.message);
+      throw error;
+    }
+  }
+  
+  /**
+   * Authenticate with Exchange/Mailcow server using basic auth
+   * 
+   * @param exchangeUrl The Exchange server URL
+   * @param username The username for authentication
+   * @param password The password for authentication
+   * @returns The authentication credentials
+   */
+  public async authenticateExchange(
+    exchangeUrl: string, 
+    username: string, 
+    password: string
+  ): Promise<CalendarCredentials> {
+    try {
+      const endpoint = '/api/auth/exchange';
+      const response = await this.api.post(endpoint, {
+        exchange_url: exchangeUrl,
+        username,
+        password
+      });
+      
+      const credentials: CalendarCredentials = response.data;
+      
+      // Store credentials for future use
+      this.setCredentials(CalendarProvider.EXCHANGE, credentials);
+      
+      return credentials;
+    } catch (error: any) {
+      console.error('Error authenticating with Exchange:', error.response?.data || error.message);
       throw error;
     }
   }

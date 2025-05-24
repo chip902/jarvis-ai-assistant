@@ -1,440 +1,463 @@
-# Calendar Integration Microservice
+# Centralized Calendar Sync System
 
-A microservice for integrating multiple calendar providers (Google Calendar, Microsoft Graph, and custom sources) for use in Node.js, Next.js, and React applications. This solution specializes in cross-environment synchronization to handle calendars locked behind isolated networks.
+A master-agent calendar synchronization system that collects calendars from multiple isolated networks and consolidates them into a single destination calendar. Perfect for organizations with calendars scattered across different networks, VPNs, and Exchange servers.
 
-## Features
-
-- Multi-provider calendar integration (Google, Microsoft, Exchange, and custom sources)
-- Cross-environment synchronization for calendars behind isolated networks
-- Remote calendar agents for VPN/Remote Desktop environments
-- Multi-tenant support for enterprise applications
-- Normalized calendar events across providers
-- Efficient incremental sync with delta tokens
-- Conflict resolution for bidirectional synchronization
-- MCP (Multi-call Protocol) support for AI agents
-- FastAPI-based RESTful API
-- OAuth2 authentication flow management
-- Next.js integration components
-
-## Synchronization Architecture
-
-This microservice addresses the challenge of synchronizing calendars across different environments, including those on isolated networks accessible only via VPN or Remote Desktop.
-
-### Key Components
-
-1. **Central Calendar Service**
-   - Core FastAPI microservice running on your Next.js application server
-   - Manages authentication with calendar providers
-   - Provides unified API for calendar operations
-   - Coordinates synchronization between all calendar sources
-   - Stores and maintains synchronized events
-
-2. **Remote Calendar Agents**
-   - Lightweight Python clients that run in isolated environments
-   - Connect to calendars only accessible within their network
-   - Collect and normalize calendar data
-   - Securely transmit events to the central service
-   - Support various synchronization methods (API, file-based, email)
-   - Work with different calendar systems (Exchange, Outlook, iCal, etc.)
-
-3. **Synchronization Controller**
-   - Manages the synchronization workflow
-   - Handles conflict resolution between calendars
-   - Maintains sync state with incremental updates
-   - Schedules periodic synchronization jobs
-
-4. **Unified Calendar API**
-   - Normalizes events from different providers
-   - Provides a consistent interface for your Next.js app
-   - React components for easy integration
-   - TypeScript client library
-
-## Project Structure
+## Architecture Overview
 
 ```
-calendar_microservice/
-├── src/
-│   ├── auth/               # Authentication services
-│   │   ├── google_auth.py  # Google OAuth implementation
-│   │   └── microsoft_auth.py  # Microsoft OAuth implementation
-│   ├── services/           # Core calendar services
-│   │   ├── calendar_event.py  # Normalized event model
-│   │   ├── google_calendar.py  # Google Calendar service
-│   │   ├── microsoft_calendar.py  # Microsoft Graph calendar service
-│   │   └── unified_calendar.py  # Combined provider service
-│   ├── sync/               # Synchronization components
-│   │   ├── architecture.py  # Sync architecture definitions
-│   │   ├── controller.py    # Sync orchestration logic
-│   │   ├── storage.py       # Sync state persistence
-│   │   └── remote_agent.py  # Agent for isolated environments
-│   ├── api/                # FastAPI routes and handlers
-│   │   ├── router.py       # API endpoint definitions
-│   │   └── sync_router.py  # Sync API endpoints
-│   ├── mcp/                # MCP server implementation
-│   │   └── calendar_server.py  # Calendar MCP server
-│   ├── utils/              # Utility modules
-│   │   └── config.py       # Configuration settings
-│   └── main.py             # Application entry point
-├── nextjs-client/          # Next.js integration
-│   ├── CalendarClient.ts   # TypeScript client for the API
-│   └── CalendarSyncComponent.tsx  # React component
-├── tests/                  # Unit and integration tests
-├── .env.example            # Example environment variables
-└── requirements.txt        # Python dependencies
+┌─────────────────────────────────────────────────────────────────┐
+│                    CENTRALIZED OFFICE SERVER                    │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │              MASTER CALENDAR SERVICE                        │ │
+│  │  • Collects from all remote agents                         │ │
+│  │  • Consolidates into unified calendar                      │ │
+│  │  • Runs on Docker (port 8008)                             │ │
+│  │  • Connects to Mailcow/Exchange destination               │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│              ↕ HTTP API Connections                              │
+└─────────────────────────────────────────────────────────────────┘
+                                   ↕
+    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+    │   REMOTE AGENT   │  │   REMOTE AGENT   │  │   REMOTE AGENT   │
+    │  ┌──────────────┐ │  │  ┌──────────────┐ │  │  ┌──────────────┐ │
+    │  │Windows PC #1 │ │  │  │Windows PC #2 │ │  │  │  VPN Network │ │
+    │  │+ Outlook     │ │  │  │+ Exchange    │ │  │  │+ Exchange    │ │
+    │  │+ Local Cal   │ │  │  │+ Team Cals   │ │  │  │+ Remote Cals │ │
+    │  └──────────────┘ │  │  └──────────────┘ │  │  └──────────────┘ │
+    └──────────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
-## Installation
+## What Gets Deployed Where
 
-### Central Service
+### 🏢 MASTER SERVER (Your Centralized Office Server)
+**Purpose**: Central hub that receives and consolidates all calendar data
+**Deployment**: Single Docker container on your office server
 
-#### Option 1: Native Installation
+**What it does**:
+- Receives calendar events from remote agents
+- Consolidates all calendars into one unified destination
+- Provides management interface and APIs
+- Connects to your Mailcow/Exchange server as the destination
 
-1. Clone the repository
-2. Create a virtual environment (optional but recommended)
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-   ```
-3. Install dependencies
-   ```
-   pip install -r requirements.txt
-   ```
-4. Copy `.env.example` to `.env` and fill in the required values
-   ```
-   cp .env.example .env
-   ```
-5. Start the service
-   ```
-   uvicorn src.main:app --reload
-   ```
+**What you need**:
+- Docker and docker-compose
+- Network access to your Mailcow server
+- Port 8008 accessible to remote agents
 
-#### Option 2: Docker Installation
+### 📱 REMOTE AGENTS (Individual Computers/Networks)
+**Purpose**: Lightweight clients that extract calendar data from local sources
+**Deployment**: 3 simple files on each Windows computer with calendars
 
-1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in the required values
-   ```
-   cp .env.example .env
-   ```
-3. Build and start the service using Docker Compose
-   ```
-   docker-compose up -d
-   ```
-4. The service will be available at `http://localhost:8008`
+**What they do**:
+- Connect to local Outlook, Exchange, or other calendar sources
+- Extract calendar events and send to master server
+- Run continuously in background
+- No configuration of destination calendars needed
 
-#### Option 3: Synology NAS with Portainer
+**What you need**:
+- Python installed on Windows machine
+- Network access to master server
+- Outlook or Exchange access
 
-1. In Portainer, navigate to Stacks and click 'Add stack'
-2. Name your stack (e.g., 'calendar-microservice')
-3. Copy the contents of the `docker-compose.yml` file into the Web editor
-4. Under Environment variables, add the following or create an .env file in your stack folder:
-   - Add all the variables from the `.env.example` file with your values
-5. Click 'Deploy the stack'
-6. The service will be available at `http://your-synology-ip:8008`
+## Quick Start Guide
 
-Note: For persistent storage on Synology, you may want to modify the volume paths in `docker-compose.yml` to point to your desired locations on your NAS.
+### Step 1: Deploy Master Server
 
-#### Required Files for Docker/Portainer Deployment
-
-To deploy this service with Docker or Portainer, ensure you have the following files:
-
-1. `docker-compose.yml` - Defines the service containers and their configurations
-2. `Dockerfile` - Contains instructions for building the application container
-3. `.env` - Environment variables for configuration (copy from `.env.example` and customize)
-4. `requirements.txt` - Lists all Python dependencies
-
-### Remote Agent
-
-To run the agent in isolated environments:
-
-1. Copy the `src/sync/remote_agent.py` file to the isolated environment
-2. Install the required dependencies
-   ```
-   pip install aiohttp uuid
-   ```
-3. Run the agent
-   ```
-   python remote_agent.py --central-api http://your-central-service-url
-   ```
-
-### Next.js Integration
-
-1. Copy the files from `nextjs-client/` to your Next.js project
-2. Import and use the components:
-
-```tsx
-import { CalendarClient } from './CalendarClient';
-import CalendarSyncComponent from './CalendarSyncComponent';
-
-// In your component:
-return (
-  <CalendarSyncComponent 
-    onEventsLoaded={(events) => console.log('Loaded events:', events)}
-    onSyncComplete={(result) => console.log('Sync completed:', result)}
-  />
-);
+1. **On your centralized office server**, clone this repository:
+```bash
+git clone <this-repo>
+cd calendar_microservice
 ```
 
-## OAuth Setup
-
-### Google Calendar API
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the Google Calendar API
-4. Create OAuth 2.0 credentials (Web application type)
-5. Add authorized redirect URIs (e.g., `http://localhost:8008/api/auth/google/callback`)
-6. Copy the Client ID and Client Secret to your `.env` file
-
-### Microsoft Graph API
-
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Register a new application in Azure Active Directory
-3. Add the following Microsoft Graph API permissions:
-   - Calendars.Read
-   - Calendars.Read.Shared
-   - User.Read
-4. Create a client secret
-5. Add redirect URIs (e.g., `http://localhost:8008/api/auth/microsoft/callback`)
-6. Copy the Application (Client) ID, Client Secret, and Tenant ID to your `.env` file
-
-## Synchronization Setup
-
-### Source Calendars
-
-For each calendar you want to sync, you'll need to:
-
-1. Authenticate with the provider (Google, Microsoft, etc.)
-2. Select which specific calendars to include
-3. Configure sync settings (direction, frequency, etc.)
-
-### Destination Calendar
-
-Choose a single calendar to use as your unified destination:
-
-1. Select an existing calendar from any provider
-2. Configure conflict resolution settings
-3. Optionally set up categories/color coding for events from different sources
-
-### Isolation Strategy
-
-For calendars in isolated environments:
-
-1. Run the remote agent in the isolated environment
-2. Configure the agent to connect to the central service
-3. Add the agent as a sync source in the central service
-
-## Usage
-
-### Basic Calendar Operations
-
-```typescript
-// Initialize the client
-const calendarClient = new CalendarClient('http://localhost:8008');
-
-// Authenticate with Google
-const googleAuthUrl = await calendarClient.getAuthUrl(CalendarProvider.GOOGLE);
-// Redirect user to googleAuthUrl
-
-// Exchange auth code for tokens
-const credentials = await calendarClient.exchangeAuthCode(
-  CalendarProvider.GOOGLE, 
-  authCode
-);
-
-// List available calendars
-const calendars = await calendarClient.listCalendars();
-
-// Set which calendars to use
-calendarClient.setCalendarSelections({
-  'google': ['primary', 'calendar2@group.calendar.google.com'],
-  'microsoft': ['AAMkADJhODkxNTY5LTZhNDYtNDg5OS04YjMyLTRlYmFhZWQ5MmJlYgBGAAAAAABl...']
-});
-
-// Get events
-const { events, syncTokens } = await calendarClient.getEvents(
-  new Date('2023-01-01'), 
-  new Date('2023-12-31')
-);
+2. **Create environment configuration**:
+```bash
+cp .env.example .env
 ```
 
-### Synchronization Configuration
+3. **Edit `.env` file** with your Mailcow server details:
+```bash
+# Master server settings
+DEBUG=false
+CORS_ORIGINS=*
 
-```typescript
-// Configure destination calendar
-await calendarClient.configureDestination({
-  id: 'unified-destination',
-  name: 'My Unified Calendar',
-  providerType: 'google',
-  connectionInfo: {},
-  credentials: googleCredentials,
-  calendarId: 'primary',
-  conflictResolution: 'latest_wins',
-  categories: {}
-});
+# Mailcow Exchange destination (ON SEPARATE SERVER - where ALL calendars sync TO)
+EXCHANGE_SERVER_URL=https://192.168.1.50/ews/exchange.asmx
+EXCHANGE_USERNAME=unified-calendar@yourdomain.com
+EXCHANGE_PASSWORD=your-mailcow-password
 
-// Add a sync source
-await calendarClient.addSyncSource({
-  id: 'work-exchange',
-  name: 'Work Exchange Calendar',
-  providerType: 'microsoft',
-  connectionInfo: {},
-  credentials: microsoftCredentials,
-  syncDirection: 'read_only',
-  syncFrequency: 'hourly',
-  syncMethod: 'api',
-  calendars: ['AAMkADJhODkxNTY5LTZhNDYtNDg5OS04YjMyLTRlYmFhZWQ5MmJlYgBGAAAAAABl...'],
-  syncTokens: {},
-  enabled: true
-});
+# Redis for caching (runs locally in Docker)
+REDIS_HOST=redis
+REDIS_PORT=6379
 
-// Run synchronization
-const result = await calendarClient.runSync();
+# API settings (master server listens on this port)
+API_PORT=8008
 ```
 
-## Remote Agent Usage
+**Example Network Setup**:
+- **Master Server**: `192.168.1.100:8008` (this Docker container)
+- **Mailcow Server**: `192.168.1.50:443` (separate server)
+- **Remote Agents**: Point to `192.168.1.100:8008`
 
-Run the agent with these options:
+4. **Deploy with Docker**:
+```bash
+docker-compose up -d
+```
+
+5. **Verify master server is running**:
+```bash
+curl http://your-office-server-ip:8008/health
+```
+
+The master server is now ready to receive calendar data from remote agents.
+
+### Step 2: Deploy Remote Agents
+
+For each computer/network with calendars you want to sync:
+
+1. **On the Windows machine**, create a new folder (e.g., `C:\CalendarAgent\`)
+
+2. **Copy these 3 files** to the folder:
+   - `src/sync/remote_agent.py`
+   - `src/sync/outlook_config.json` 
+   - `src/sync/run_agent.bat`
+
+3. **Install Python** if not already installed:
+   - Download from [python.org](https://python.org/downloads/)
+   - ✅ Check "Add Python to PATH" during installation
+
+4. **Edit `outlook_config.json`**:
+```json
+{
+  "agent_id": "unique-agent-name",
+  "agent_name": "Office Computer 1",
+  "environment": "Main Office",
+  "central_api_url": "http://your-office-server-ip:8008",
+  "sync_interval_minutes": 30,
+  "calendar_sources": [
+    {
+      "type": "outlook",
+      "name": "John's Work Calendar",
+      "calendar_name": "Calendar"
+    }
+  ]
+}
+```
+
+5. **Start the agent**:
+   - Double-click `run_agent.bat`
+   - Click "Allow" when Outlook asks for permission
+   - Agent will start syncing automatically
+
+6. **Optional - Auto-start on boot**:
+   - Right-click `run_agent.bat` → Create shortcut
+   - Press Win+R, type `shell:startup`, press Enter
+   - Move shortcut to this folder
+
+### Step 3: Verify Synchronization
+
+1. **Check master server logs**:
+```bash
+docker-compose logs -f calendar-service
+```
+
+2. **Check agent logs** on Windows machines:
+   - Look for `calendar_agent.log` in the agent folder
+
+3. **Verify calendars in Mailcow**:
+   - Log into your Mailcow webmail
+   - Check the unified calendar account for synchronized events
+
+## Configuration Details
+
+### Master Server Environment Variables
 
 ```bash
-python remote_agent.py --help
-# Options:
-#   --config CONFIG         Path to configuration file
-#   --central-api URL       URL of central calendar service API
-#   --once                  Run sync once and exit
-#   --interval MINUTES      Sync interval in minutes
-```
+# Required - Mailcow/Exchange destination (ON SEPARATE SERVER)
+EXCHANGE_SERVER_URL=https://192.168.1.50/ews/exchange.asmx
+EXCHANGE_USERNAME=calendar@yourdomain.com
+EXCHANGE_PASSWORD=strong-password
 
-For regular syncing, you can set up the agent as a scheduled task/cron job in the isolated environment.
-
-## Advanced Configuration
-
-### Environment Variables
-
-```
-# API settings
-DEBUG=false
-CORS_ORIGINS=http://localhost:3000,https://yourapp.com
-
-# Google Calendar
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8008/api/auth/google/callback
-
-# Microsoft Graph
-MS_CLIENT_ID=your-client-id
-MS_CLIENT_SECRET=your-client-secret 
-MS_REDIRECT_URI=http://localhost:8008/api/auth/microsoft/callback
-MS_TENANT_ID=your-tenant-id
-
-# Redis for caching (optional)
-REDIS_HOST=localhost
+# Optional - Redis caching (runs in same Docker network as master)
+REDIS_HOST=redis
 REDIS_PORT=6379
-REDIS_DB=0
 REDIS_PASSWORD=
 
-# Sync settings
+# Optional - API settings (master server configuration)
+DEBUG=false
+CORS_ORIGINS=*
+API_PORT=8008
 SYNC_INTERVAL_MINUTES=60
 ```
 
-### Custom Calendar Sources
+**Multi-Server Network Configuration**:
+```
+┌─────────────────────┐    ┌─────────────────────┐
+│   MASTER SERVER     │    │   MAILCOW SERVER    │
+│  192.168.1.100      │◄──►│  192.168.1.50       │
+│  ┌─────────────────┐│    │  ┌─────────────────┐ │
+│  │Calendar Service ││    │  │Mailcow Exchange │ │
+│  │Port 8008        ││    │  │Port 443/80      │ │
+│  │+ Redis          ││    │  │EWS Endpoint     │ │
+│  └─────────────────┘│    │  └─────────────────┘ │
+└─────────────────────┘    └─────────────────────┘
+        ▲
+        │ Remote Agents connect here
+        │ (192.168.1.100:8008)
+```
 
-For custom calendar sources, you can extend the remote agent:
+### Remote Agent Configuration
 
-1. Create a new method in `remote_agent.py` for your custom source
-2. Implement the required logic to fetch and normalize events
-3. Register the custom source type in the agent
+Each agent needs a unique `outlook_config.json`:
+
+```json
+{
+  "agent_id": "office-pc-1",
+  "agent_name": "John's Office Computer",
+  "environment": "Main Office Network",
+  "central_api_url": "http://192.168.1.100:8008",
+  "sync_interval_minutes": 30,
+  "calendar_sources": [
+    {
+      "type": "outlook",
+      "name": "Primary Calendar",
+      "calendar_name": "Calendar"
+    },
+    {
+      "type": "outlook", 
+      "name": "Team Calendar",
+      "calendar_name": "Shared Team Calendar"
+    }
+  ]
+}
+```
+
+**Configuration Options**:
+- `agent_id`: Unique identifier for this agent
+- `central_api_url`: URL of your master server
+- `sync_interval_minutes`: How often to sync (15-60 minutes recommended)
+- `calendar_sources`: List of local calendars to sync
+
+### Multiple Calendar Sources per Agent
+
+To sync multiple calendars from one computer:
+
+```json
+"calendar_sources": [
+  {
+    "type": "outlook",
+    "name": "Personal Calendar",
+    "calendar_name": "Calendar"
+  },
+  {
+    "type": "outlook",
+    "name": "Work Projects",
+    "calendar_name": "Project Calendar"
+  },
+  {
+    "type": "exchange",
+    "name": "Exchange Calendar",
+    "exchange_url": "https://exchange.company.com/ews/exchange.asmx",
+    "username": "user@company.com",
+    "password": "password"
+  }
+]
+```
+
+## Network Requirements
+
+### Master Server (192.168.1.100)
+- **Inbound**: Port 8008 (from remote agents)
+- **Outbound**: Port 443/80 (to Mailcow server at 192.168.1.50)
+- **Internal**: Port 6379 (Redis within Docker network)
+
+### Mailcow Server (192.168.1.50)
+- **Inbound**: Port 443/80 (from master server)
+- **EWS Endpoint**: `/ews/exchange.asmx` must be accessible
+
+### Remote Agents  
+- **Outbound**: HTTP access to master server on port 8008 (192.168.1.100:8008)
+- **Local**: Access to Outlook/Exchange on local network
+
+### Firewall Rules
+```bash
+# On master server (192.168.1.100)
+sudo ufw allow 8008/tcp  # For remote agents
+sudo ufw allow out 443/tcp  # To Mailcow server
+
+# On Mailcow server (192.168.1.50) 
+sudo ufw allow from 192.168.1.100 to any port 443  # From master server
+
+# On remote agent networks
+# Ensure outbound access to 192.168.1.100:8008
+```
+
+## Troubleshooting
+
+### Master Server Issues
+
+**Service won't start**:
+```bash
+# Check logs
+docker-compose logs calendar-service
+
+# Check if port is in use
+netstat -tlnp | grep 8008
+
+# Restart services
+docker-compose down && docker-compose up -d
+```
+
+**Can't connect to Mailcow**:
+```bash
+# Test EWS endpoint
+curl -k https://your-mailcow-server/ews/exchange.asmx
+
+# Check credentials
+# Verify Exchange authentication in Mailcow admin panel
+```
+
+### Remote Agent Issues
+
+**Agent won't connect to master**:
+- Check `central_api_url` in config
+- Verify network connectivity: `telnet master-server-ip 8008`
+- Check firewall rules
+
+**Outlook permission denied**:
+- Run as administrator
+- Check Outlook security settings
+- Restart Outlook and try again
+
+**Calendar not found**:
+- Check exact calendar name in Outlook
+- Case-sensitive matching required
+- Use calendar display name, not folder name
+
+**Python not found**:
+- Reinstall Python with "Add to PATH" checked
+- Restart command prompt after installation
+
+### Common Issues
+
+**Events not appearing in destination**:
+- Check master server logs for sync errors
+- Verify Exchange credentials and permissions
+- Check date ranges (default: past 30 days, future 90 days)
+
+**Duplicate events**:
+- Each agent should have unique `agent_id`
+- Check for multiple agents syncing same calendar
+
+**Performance issues**:
+- Increase `sync_interval_minutes` for large calendars
+- Monitor Redis memory usage
+- Check network latency between components
 
 ## Security Considerations
 
-- Remote agents use token-based authentication with the central service
-- All API communications use HTTPS
-- OAuth tokens are stored securely and never exposed in URLs
-- Agents run with minimal required permissions in their environments
-- Credential isolation ensures agents only access what they need
+### Master Server
+- Run Docker containers as non-root user
+- Use strong Exchange/Mailcow passwords
+- Enable TLS for Mailcow connections
+- Regular security updates
 
-## Docker Setup
+### Remote Agents
+- Store configuration files in secure locations
+- Use service accounts for Exchange connections
+- Limit network access to master server only
+- Regular Python security updates
 
-The project includes Docker support for easy deployment.
+### Network
+- Use VPN for remote agent connections if possible
+- Enable HTTPS for master server (use reverse proxy)
+- Monitor API access logs
+- Implement rate limiting if needed
 
-### Dockerfile
+## Monitoring and Maintenance
 
-A Dockerfile is provided that:
-- Uses Python 3.11 slim image as base
-- Installs all required dependencies
-- Creates a non-root user for security
-- Exposes port 8008 for the API
-
-### Docker Compose
-
-A docker-compose.yml file is included that sets up:
-
-1. The calendar microservice 
-2. A Redis instance for caching and storage
-
-To use it:
-
+### Health Checks
 ```bash
-# Start the services
-docker-compose up -d
+# Master server health
+curl http://master-server:8008/health
 
-# View logs
-docker-compose logs -f
+# View sync status
+curl http://master-server:8008/api/sync/status
 
-# Stop the services
-docker-compose down
+# Agent connectivity
+grep "Connected to central API" /path/to/agent/calendar_agent.log
 ```
 
-### Deployment on Synology NAS with Portainer
+### Log Locations
+- **Master server**: `docker-compose logs calendar-service`
+- **Remote agents**: `calendar_agent.log` in agent folder
+- **Redis**: `docker-compose logs redis`
 
-1. **Prerequisites**:
-   - Synology NAS with Docker package installed
-   - Portainer installed on your Synology NAS
+### Backup and Recovery
+```bash
+# Backup Redis data
+docker-compose exec redis redis-cli BGSAVE
 
-2. **Set up the stack**:
-   - Log in to Portainer (usually at http://your-synology-ip:9000)
-   - Navigate to 'Stacks' and click 'Add stack'
-   - Name your stack (e.g., 'calendar-microservice')
-   - In the 'Web editor' tab, paste the contents of your docker-compose.yml file
-  
-3. **Configure environment variables**:
-   - Option 1: Use the Portainer UI to add each environment variable
-   - Option 2: Create an .env file in your stack folder on the NAS
+# Backup configuration
+tar -czf calendar-backup.tar.gz .env docker-compose.yml
 
-4. **Configure volumes**:
-   - For better persistence on Synology, you can modify the volume paths to use specific folders on your NAS
-   - Example modified volume section:
-     ```yaml
-     volumes:
-       calendar-storage:
-         driver: local
-         driver_opts:
-           type: none
-           o: bind
-           device: /volume1/docker/calendar-microservice/storage
-       redis-data:
-         driver: local
-         driver_opts:
-           type: none
-           o: bind
-           device: /volume1/docker/calendar-microservice/redis-data
-     ```
+# Restore
+docker-compose down
+# Restore files
+docker-compose up -d
+```
 
-5. **Deploy the stack**:
-   - Click 'Deploy the stack' button
-   - Portainer will create the containers according to your configuration
+## Advanced Configuration
 
-6. **Access the service**:
-   - The calendar microservice will be available at http://your-synology-ip:8008
-   - You can configure reverse proxy in Synology DSM to use a custom domain
+### Custom Calendar Sources
 
-7. **Maintenance**:
-   - View logs in Portainer by clicking on the container name and then 'Logs'
-   - Update the service by pulling new code, updating your docker-compose.yml, and redeploying the stack
+Extend agents to support additional calendar types:
+
+```python
+# In remote_agent.py
+class CustomCalendarSource:
+    def get_events(self, start_date, end_date):
+        # Your custom implementation
+        return events
+```
+
+### Load Balancing Multiple Masters
+
+For high availability, deploy multiple master servers:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  calendar-service-1:
+    # ... configuration
+  calendar-service-2:
+    # ... configuration
+  nginx:
+    image: nginx
+    # Load balancer configuration
+```
+
+### Integration with Next.js/React
+
+Use the provided client libraries:
+
+```typescript
+// Next.js integration
+import { CalendarClient } from './CalendarClient';
+
+const client = new CalendarClient('http://master-server:8008');
+const events = await client.getEvents(startDate, endDate);
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create feature branch
+3. Add tests for new functionality
+4. Submit pull request
 
 ## License
 
-[MIT License](LICENSE)
+MIT License - see LICENSE file for details
